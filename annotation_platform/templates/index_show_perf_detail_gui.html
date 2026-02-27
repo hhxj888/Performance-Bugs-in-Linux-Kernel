@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script src="/static/js/jquery-3.2.1.min.js"></script>
+    <script src="/static/js/popper.min.js"></script>
+    <script src="/static/js/bootstrap.min.js"></script>
+    <script src="/static/js/jquery-ui.min.js"></script>
+    <script src="/static/js/LightRange.min.js"></script>
+    <script src="/static/js/script.js"></script>
+    <script src="/static/js/jquery.tagsinput.js"></script>
+    <meta charset="UTF-8">
+    <title>Commit Record Viewer</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <link rel="stylesheet" href="/static/css/jquery-ui.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery.tagsinput.css') }}">
+    <style>
+        body {
+            font-family: "Times New Roman", Times, serif;
+            margin: 0;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        button {
+            font-size: 24px;
+            font-family: "Times New Roman", Times, serif;
+            font-weight: bold;
+        }
+        input {
+            font-size: 24px;
+            font-family: "Times New Roman", Times, serif;
+            font-weight: bold;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        #hh {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            max-width: 100%;
+            gap: 10px;
+        }
+        #info {
+            display: flex;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        #commit_info {
+            width: 100%;
+            align-items: center;
+        }
+        #reason {
+            width: 100%;
+            height: 10rem;
+        }
+        #perf_reason {
+            width: 100%;
+            height: 90%;
+            box-sizing: border-box;
+        }
+        #commit_area {
+            width: 48%;
+            max-height: 480px;
+            overflow-y: auto;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: left;
+        }
+        #area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 48%;
+        }
+        .box-label {
+            background-color: #4a90d9;
+            color: #fff;
+            padding: 6px 14px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+        .box-wrapper {
+            width: 48%;
+            display: flex;
+            flex-direction: column;
+        }
+        .box-wrapper #commit_area,
+        .box-wrapper #area {
+            width: 100%;
+            border-radius: 0 0 5px 5px;
+        }
+        #area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #translate_commit_area,
+        #processed_commit_area {
+            height: 220px;
+            max-width: 100%;
+            overflow-y: auto;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            border: 1px solid #ccc;
+            border-radius: 0 0 5px 5px;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: left;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+        .sub-box-label {
+            background-color: #e67e22;
+            color: #fff;
+            padding: 4px 10px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+        }
+        button {
+            margin: 10px;
+        }
+        button:active {
+            background-color: #ff7f50;
+        }
+        #navigation {
+            text-align: center;
+        }
+        .red-text {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div style="display:flex; justify-content:space-between; width:100%; padding:0 10px; margin-bottom:10px; align-items:center;">
+            <div style="font-size:18px;">
+                Annotator: <strong style="color:#4a90d9;">{{ username }}</strong>
+            </div>
+            <div>
+                <a href="/compare" style="margin-right:15px; font-size:16px;">Compare Results</a>
+                <a href="/logout" style="font-size:16px; color:#e74c3c;">Logout</a>
+            </div>
+        </div>
+        <div id="info">
+            <div id="commit_info">
+                <p id="rank_id"></p>
+                <p id="fix_hash"></p>
+                <p id="bug_hash"></p>
+                <div id="code"></div>
+            </div>
+        </div>
+        <div id="hh">
+            <div class="box-wrapper">
+                <div class="box-label">Commit Message + Git Diff</div>
+                <div id="commit_area">
+                    <pre><p></p></pre>
+                </div>
+            </div>
+            <div class="box-wrapper">
+                <div id="area">
+                    <div style="width:100%;">
+                        <div class="sub-box-label">Commit Message</div>
+                        <div id="processed_commit_area">
+                            <pre><p></p></pre>
+                        </div>
+                    </div>
+                    <div style="width:100%;">
+                        <div class="sub-box-label" style="background-color:#27ae60;">Git Diff</div>
+                        <div id="translate_commit_area">
+                            <pre><p></p></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="navigation">
+        <button id="prev_button" onclick="previous_record()">Previous</button>
+        <button id="next_button" onclick="next_record()">Next</button>
+        <button onclick="save_data(true)">Save (Is Performance Issue)</button>
+        <button onclick="save_data(false)">Save (Not Performance Issue!!)</button>
+        <label id="save_state">Not Saved</label>
+        <button onclick="copyToClipboard(0)">Copy Full to Clipboard</button>
+        <button onclick="copyToClipboard(1)">Copy Simple to Clipboard</button>
+        <label id="copy_res">Not Copied</label>
+    </div>
+    <div>
+        Category
+        <div class="tag_input">
+            <input name="tags" class="form-control" id="tags" value="" />
+        </div>
+    </div>
+    <div id="categories"></div>
+    <div id="reason">
+        Reason Analysis:
+        <textarea id="perf_reason"></textarea>
+    </div>
+
+    <script type="text/javascript">
+        $('#tags').tagsInput();
+        $('.word_tag').tagsInput();
+
+        function addNonExistentTag(tag) {
+            if (!$('#tags').tagExist(tag)) {
+                $('#tags').addTag(tag);
+            }
+        }
+    </script>
+
+    <script>
+        function copyToClipboard(choice) {
+            var div;
+            if (choice == 0) {
+                div = document.getElementById("commit_area");
+            } else {
+                div = document.getElementById("processed_commit_area");
+            }
+            var temp = document.createElement("textarea");
+            var prefix = 'Here is a commit that fixes a Linux kernel bug: ';
+            var suffix = " Please first summarize what this commit message says, then analyze what this fix does. Explain in detail the problem and the solution. How was the fix implemented? Did the previous bug involve performance issues? Does it belong to some kind of performance anti-pattern? Please answer in English.";
+            temp.value = prefix + div.innerText + suffix;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand("copy");
+            document.body.removeChild(temp);
+            document.getElementById("copy_res").textContent = "Copied";
+        }
+
+        function show_record(data) {
+            document.getElementById('rank_id').textContent = 'ID: ' + data.record.id;
+            document.getElementById('fix_hash').textContent = 'Fix Commit Hash: ' + data.record.fix_commit_hash;
+            document.getElementById('bug_hash').textContent = 'Bug Commit Hash: ' + data.record.bug_commit_hash.join(', ');
+            document.getElementById('commit_area').innerHTML = data.record.commit;
+            document.getElementById('processed_commit_area').innerHTML = data.processed_commit;
+            document.getElementById('translate_commit_area').innerHTML = data.git_diff || '';
+            var command = 'git difftool -t code ' + data.record.bug_commit_hash[0] + ' ' + data.record.fix_commit_hash + ' -- ./' + data.code;
+            document.getElementById('code').innerHTML = command;
+            for (let i of data.record.category) {
+                addNonExistentTag(i);
+            }
+        }
+
+        function clear_temp_info() {
+            document.getElementById('translate_commit_area').innerHTML = "";
+            document.getElementById('save_state').textContent = "Not Saved";
+            document.getElementById("copy_res").textContent = "Not Copied";
+            $('#tags').importTags('');
+            document.getElementById('perf_reason').value = "";
+            document.getElementById('code').innerHTML = "";
+        }
+
+        function previous_record() {
+            clear_temp_info();
+            fetch('/prev_record/')
+                .then(response => response.json())
+                .then(data => { show_record(data); })
+                .catch(error => console.error('Error:', error));
+            get_category();
+        }
+
+        function next_record() {
+            clear_temp_info();
+            fetch('/next_record/')
+                .then(response => response.json())
+                .then(data => { show_record(data); })
+                .catch(error => console.error('Error:', error));
+            get_category();
+        }
+
+        function get_category() {
+            document.getElementById('categories').innerHTML = '';
+            fetch('/get_category/')
+                .then(response => response.json())
+                .then(data => {
+                    data.category.forEach(buttonValue => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'btn btn-outline-dark';
+                        button.value = buttonValue;
+                        button.textContent = buttonValue;
+                        button.style.fontSize = '24px';
+                        button.style.fontFamily = '"Times New Roman", Times, serif';
+                        button.style.fontWeight = 'bold';
+                        button.onclick = function () { addNonExistentTag(this.value); };
+                        document.getElementById('categories').appendChild(button);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function save_data(is_perf) {
+            var tags = $.map($('#tags').siblings('.tagsinput').children('.tag'), function (e, i) {
+                return $(e).text().substring(0, $(e).text().length - 1).trim();
+            });
+            var reason = document.getElementById('perf_reason').value;
+            const payload = {
+                'category': tags,
+                'reason': reason,
+                'is_perf': is_perf
+            };
+            const requestOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            };
+            fetch('/save_json/', requestOptions)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('save_state').textContent = data.save_state;
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function get_init_record() {
+            fetch('/init_record/')
+                .then(response => response.json())
+                .then(data => { show_record(data); })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // Fetch initial data when page is loaded
+        document.addEventListener('DOMContentLoaded', function () {
+            get_init_record();
+            get_category();
+        });
+    </script>
+</body>
+</html>

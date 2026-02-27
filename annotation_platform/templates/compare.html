@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Annotation Comparison</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <script src="/static/js/jquery-3.2.1.min.js"></script>
+    <style>
+        body {
+            font-family: "Times New Roman", Times, serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+        }
+        .header h2 { margin: 0; color: #333; }
+        .header a { font-size: 16px; margin-left: 15px; }
+        .stats-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            flex: 1;
+            min-width: 180px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-card .num { font-size: 36px; font-weight: bold; }
+        .stat-card .label { font-size: 14px; color: #666; margin-top: 5px; }
+        .stat-card.green .num { color: #27ae60; }
+        .stat-card.red .num { color: #e74c3c; }
+        .stat-card.blue .num { color: #2980b9; }
+        .stat-card.orange .num { color: #e67e22; }
+        .stat-card.purple .num { color: #8e44ad; }
+        .section { margin-bottom: 25px; }
+        .section h3 {
+            background: #4a90d9;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 6px 6px 0 0;
+            margin: 0;
+            font-size: 18px;
+        }
+        .section h3.diff-header { background: #e74c3c; }
+        .section h3.only1-header { background: #e67e22; }
+        .section h3.only2-header { background: #8e44ad; }
+        .section h3.same-header { background: #27ae60; }
+        .section-body {
+            background: #fff;
+            padding: 15px;
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        table th {
+            background: #f0f0f0;
+            padding: 10px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid #ddd;
+            position: sticky;
+            top: 0;
+        }
+        table td { padding: 8px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+        table tr:hover { background: #fafafa; }
+        .diff-cell { background: #fff3cd; }
+        .tag { display: inline-block; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 12px; }
+        .tag-perf { background: #d4edda; color: #155724; }
+        .tag-no-perf { background: #f8d7da; color: #721c24; }
+        .tag-cat { background: #d1ecf1; color: #0c5460; }
+        .btn-action {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .btn-export { background: #3498db; color: #fff; }
+        .btn-export:hover { background: #2980b9; }
+        .btn-remove { background: #e74c3c; color: #fff; }
+        .btn-remove:hover { background: #c0392b; }
+        .btn-refresh { background: #27ae60; color: #fff; }
+        .btn-refresh:hover { background: #219a52; }
+        .actions-bar { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        #status-msg { margin-left: 10px; font-size: 14px; color: #666; }
+        .loading { text-align: center; padding: 40px; font-size: 18px; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Annotation Comparison</h2>
+        <div>
+            Current User: <strong>{{ username }}</strong>
+            <a href="/main">Back to Annotation</a>
+            <a href="/logout" style="color:#e74c3c;">Logout</a>
+        </div>
+    </div>
+
+    <div class="actions-bar">
+        <button class="btn-action btn-refresh" onclick="loadCompare()">Refresh</button>
+        <button class="btn-action btn-export" onclick="exportDiff()">Export Diff JSON</button>
+        <button class="btn-action btn-remove" onclick="removeSame()">Remove Identical (Keep Diff)</button>
+        <span id="status-msg"></span>
+    </div>
+
+    <div id="stats-container" class="stats-bar">
+        <div class="loading">Loading comparison data...</div>
+    </div>
+
+    <div id="content-container"></div>
+
+    <script>
+        let compareData = null;
+
+        function loadCompare() {
+            document.getElementById('status-msg').textContent = 'Loading...';
+            fetch('/api/compare')
+                .then(r => r.json())
+                .then(data => {
+                    compareData = data;
+                    renderStats(data);
+                    renderContent(data);
+                    document.getElementById('status-msg').textContent = 'Loaded';
+                })
+                .catch(err => {
+                    document.getElementById('status-msg').textContent = 'Load failed: ' + err;
+                });
+        }
+
+        function renderStats(data) {
+            const s = data.stats;
+            document.getElementById('stats-container').innerHTML = `
+                <div class="stat-card blue">
+                    <div class="num">${data.total_user1}</div>
+                    <div class="label">${data.user1} Annotated</div>
+                </div>
+                <div class="stat-card purple">
+                    <div class="num">${data.total_user2}</div>
+                    <div class="label">${data.user2} Annotated</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="num">${s.same_count}</div>
+                    <div class="label">Agreed</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="num">${s.diff_count}</div>
+                    <div class="label">Disagreed</div>
+                </div>
+                <div class="stat-card orange">
+                    <div class="num">${s.only_user1_count + s.only_user2_count}</div>
+                    <div class="label">One-sided</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="num">${s.agreement_rate}%</div>
+                    <div class="label">Agreement Rate</div>
+                </div>
+            `;
+        }
+
+        function perfTag(v) {
+            if (v === true) return '<span class="tag tag-perf">Performance</span>';
+            if (v === false) return '<span class="tag tag-no-perf">Not Performance</span>';
+            return '<span class="tag">-</span>';
+        }
+        function catTags(cats) {
+            if (!cats || cats.length === 0) return '-';
+            return cats.map(c => `<span class="tag tag-cat">${c}</span>`).join(' ');
+        }
+
+        function renderContent(data) {
+            let html = '';
+
+            if (data.diff.length > 0) {
+                html += `<div class="section">
+                    <h3 class="diff-header">Differing Annotations (${data.diff.length}) - Results differ between annotators</h3>
+                    <div class="section-body">
+                    <table>
+                        <tr>
+                            <th>ID</th>
+                            <th>${data.user1} - Perf?</th>
+                            <th>${data.user1} - Category</th>
+                            <th>${data.user1} - Reason</th>
+                            <th>${data.user2} - Perf?</th>
+                            <th>${data.user2} - Category</th>
+                            <th>${data.user2} - Reason</th>
+                        </tr>`;
+                data.diff.forEach(item => {
+                    const a1 = item[data.user1];
+                    const a2 = item[data.user2];
+                    const perfDiff = a1.is_perf !== a2.is_perf ? 'diff-cell' : '';
+                    const catDiff = JSON.stringify((a1.category||[]).sort()) !== JSON.stringify((a2.category||[]).sort()) ? 'diff-cell' : '';
+                    const reasonDiff = (a1.reason||'').trim() !== (a2.reason||'').trim() ? 'diff-cell' : '';
+                    html += `<tr>
+                        <td>${item.id}</td>
+                        <td class="${perfDiff}">${perfTag(a1.is_perf)}</td>
+                        <td class="${catDiff}">${catTags(a1.category)}</td>
+                        <td class="${reasonDiff}">${a1.reason || '-'}</td>
+                        <td class="${perfDiff}">${perfTag(a2.is_perf)}</td>
+                        <td class="${catDiff}">${catTags(a2.category)}</td>
+                        <td class="${reasonDiff}">${a2.reason || '-'}</td>
+                    </tr>`;
+                });
+                html += '</table></div></div>';
+            }
+
+            if (data.only_user1.length > 0) {
+                html += `<div class="section">
+                    <h3 class="only1-header">Only ${data.user1} (${data.only_user1.length})</h3>
+                    <div class="section-body">
+                    <table>
+                        <tr><th>ID</th><th>Perf?</th><th>Category</th><th>Reason</th></tr>`;
+                data.only_user1.forEach(item => {
+                    html += `<tr>
+                        <td>${item.id}</td>
+                        <td>${perfTag(item.is_perf)}</td>
+                        <td>${catTags(item.category)}</td>
+                        <td>${item.reason || '-'}</td>
+                    </tr>`;
+                });
+                html += '</table></div></div>';
+            }
+
+            if (data.only_user2.length > 0) {
+                html += `<div class="section">
+                    <h3 class="only2-header">Only ${data.user2} (${data.only_user2.length})</h3>
+                    <div class="section-body">
+                    <table>
+                        <tr><th>ID</th><th>Perf?</th><th>Category</th><th>Reason</th></tr>`;
+                data.only_user2.forEach(item => {
+                    html += `<tr>
+                        <td>${item.id}</td>
+                        <td>${perfTag(item.is_perf)}</td>
+                        <td>${catTags(item.category)}</td>
+                        <td>${item.reason || '-'}</td>
+                    </tr>`;
+                });
+                html += '</table></div></div>';
+            }
+
+            if (data.same.length > 0) {
+                html += `<div class="section">
+                    <h3 class="same-header">Agreed Annotations (${data.same.length}) - Both annotators agree</h3>
+                    <div class="section-body">
+                    <table>
+                        <tr><th>ID</th><th>Perf?</th><th>Category</th><th>Reason</th></tr>`;
+                data.same.forEach(item => {
+                    html += `<tr>
+                        <td>${item.id}</td>
+                        <td>${perfTag(item.is_perf)}</td>
+                        <td>${catTags(item.category)}</td>
+                        <td>${item.reason || '-'}</td>
+                    </tr>`;
+                });
+                html += '</table></div></div>';
+            }
+
+            if (!html) {
+                html = '<div class="loading">No annotation data to compare yet</div>';
+            }
+
+            document.getElementById('content-container').innerHTML = html;
+        }
+
+        function exportDiff() {
+            document.getElementById('status-msg').textContent = 'Exporting...';
+            fetch('/api/export_diff')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('status-msg').textContent = data.message;
+                })
+                .catch(err => {
+                    document.getElementById('status-msg').textContent = 'Export failed: ' + err;
+                });
+        }
+
+        function removeSame() {
+            if (!confirm('Are you sure you want to remove identical annotations?\nConsensus annotations will be saved to annotation_consensus.json and removed from individual files.')) {
+                return;
+            }
+            document.getElementById('status-msg').textContent = 'Processing...';
+            fetch('/api/remove_same', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('status-msg').textContent = data.message;
+                    loadCompare();
+                })
+                .catch(err => {
+                    document.getElementById('status-msg').textContent = 'Operation failed: ' + err;
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCompare();
+        });
+    </script>
+</body>
+</html>
