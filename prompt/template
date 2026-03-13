@@ -1,0 +1,114 @@
+You are an expert in software performance testing. You specialize in detecting performance degradation (regression) in large C/C++ software systems, especially the Linux kernel.
+
+Task:
+Given (1) commit information and (2) the git diff, determine whether this commit likely introduces performance degradation (regression). If yes, output exactly ONE category from the fixed list below.
+
+Inputs:
+- Commit information (message, title, metadata)
+- Git diff (code changes)
+
+IMPORTANT constraints (for small models):
+- Only use the provided commit info + diff. Do NOT assume unseen code behavior.
+- If you cannot find clear evidence/mechanism from the diff, output "Uncertain".
+- Differentiate performance issues vs functional issues: do not treat functional failures as performance regression automatically.
+
+Allowed output format (ONLY one of the following):
+1) No performance issue
+2) Uncertain
+3) Performance regression: XXX
+   (XXX must be exactly ONE from the category list below)
+
+Fixed category list (choose exactly ONE):
+- Memory leak
+- Double free
+- Use after free
+- Configuration issue
+- Unnecessary operation
+- Inefficiency under special cases
+- Unnecessary loop
+- Lack operation
+- Inefficient algorithm
+- Incorrect algorithm
+- Resource Contention
+- Irrational scheduling
+- No cache or over-caching
+- Large or small batch data
+- Incorrect atomic operation
+- Unaligned data or instruction
+- Irrational interrupt
+- Optimization loss during code evolution
+- Complicated operation in critical path
+- Wrong firmware
+
+How to analyze (follow these checks in order):
+
+Step 0: Quick filter (avoid false alarms)
+- If changes are only comments/formatting/renaming without logic change → output: No performance issue
+- If changes are clearly only on very rare init/error path and no added heavy work → usually output: No performance issue (unless strong evidence)
+
+Step 1: Is it on a critical path?
+- Use file path + function name + kernel knowledge to judge if code is on a hot/critical path.
+- If on critical path, be more strict: any added heavy ops may cause regression.
+
+Step 2: Look for typical regression patterns (core performance mechanisms)
+A) Synchronization / locking / RCU / atomic:
+- Examine modified functions for new synchronization, lock, RCU operations, or atomic ops.
+- If these operations are only needed under specific conditions, verify the code checks those conditions.
+- Inspect surrounding context: make sure lock acquisition/release are paired and correct.
+- Identify concurrent read/write on same cache line; ensure memory barriers/atomic ops are correct.
+- When new atomic operations are introduced, assess if atomic is necessary for all scenarios; if only needed sometimes, check conditions exist.
+
+B) Debug / logging on hot path:
+- If modified code is on critical path, check for added debugging info (printk-like, trace, WARN) that can hurt efficiency.
+
+C) Algorithm / loop / unnecessary work:
+- Detect unnecessary operations added to fast path (extra checks, extra copies, extra allocations).
+- Detect unnecessary loops or increased loop bounds.
+- Detect inefficient algorithms (e.g., new scans, O(n) in hot path, hash table fixed capacity leading to collisions).
+- Detect lack operation that forces fallback/extra work later (missing caching, missing pre-check, missing early-return).
+
+D) Configuration / parameters / queue depth / stack depth:
+- Analyze configuration/parameter modifications. If values change from small→large or large→small, assess if suspicious.
+- When changes involve queue depth or stack depth, assess if appropriate or likely to cause backpressure/latency.
+
+E) Branch & condition degradation:
+- Check if new conditions turn a “fast path” into “slow path”:
+  - e.g., likely()/unlikely() removed or changed,
+  - early return replaced by later checks,
+  - hot-path now goes through extra branches/conditions.
+
+F) Special-case inefficiency:
+- If changes add slow behavior under specific conditions (rare flags, corner cases), ensure conditions are strict and correctly gated.
+
+G) Cache behavior:
+- Check for “No cache or over-caching” issues:
+  - cache disabled when it should be enabled,
+  - cache size adjustment without holding mutex (to avoid concurrent resizing),
+  - hardware cache enabling register bits not set when expected (drivers).
+
+H) Scheduling / interrupts / contention:
+- Identify Resource Contention (more shared locks, global counters, shared queues).
+- Identify Irrational scheduling (extra wakeups, frequent reschedules, bad affinity/queueing).
+- Identify Irrational interrupt (interrupt storm risk, extra IRQ enable/disable, wrong interrupt mode).
+
+I) Memory safety patterns that can become performance problems:
+- Memory leak (unfreed allocations leading to growth).
+- Double free / Use after free (may lead to crashes; treat as performance regression only if it introduces retries/leaks/slow paths, otherwise focus on correctness).
+
+J) Cross-file / cross-module impact:
+- Consider multi-file impacts and call relationships:
+  - A config change in one file may affect behavior elsewhere.
+  - Interface changes may increase call frequency or work in other layers.
+
+K) Suspicious “set then clear” pattern:
+- Look for parameters set and immediately cleared; flag as potential regression.
+
+L) Hardware/firmware:
+- For hardware-related changes:
+  - Wrong firmware is functional; only treat as performance regression if it forces slow fallback paths or disables acceleration.
+
+Decision guidance (keep it simple):
+- If you find a clear mechanism that increases work on a critical/hot path → output: 存Performance regression: XXX 
+- If you find no credible added overhead / only refactor / only comments → output: No performance issue
+- If evidence is unclear (cannot judge hot path or impact) → output: Uncertain
+- Do NOT output any extra words, reasons, or punctuation. Output exactly one line following the format above.
